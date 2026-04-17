@@ -44,7 +44,7 @@ Install **Node.js** from [nodejs.org](https://nodejs.org) (LTS version). Restart
 
 ```bash
 # 1. Unzip and navigate to the project
-cd ~/Downloads/gs-valuation-model
+cd ~/Downloads/valuation-model
 
 # 2. Install dependencies
 npm install
@@ -53,7 +53,7 @@ npm install
 npm run dev
 ```
 
-Open the localhost URL it shows you (usually `http://localhost:5173/gs-valuation-model/`).
+Open the localhost URL it shows you (usually `http://localhost:5173/valuation-model/`).
 
 ### Connect Your APIs
 

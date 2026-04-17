@@ -10,21 +10,21 @@ const DEFAULT_STOCK = {
   dayHigh: 179.84, dayLow: 176.85, currentRevLabel: "FY26",
 };
 const DEFAULT_ANALYST = { consensus: "Strong Buy", avgTarget: 234, buyRating: 42, totalAnalysts: 45, highTarget: 300, lowTarget: 160 };
-const mkScenario = (label, emoji, color, tp, pe, rev, eps, cagr, gm, nm, mr1, mr2, thesis, risks, drivers) => ({
-  label, emoji, color, colorLight: color.replace(")", ",0.08)").replace("rgb", "rgba"),
+const mkScenario = (label, emoji, color, colorLight, tp, pe, rev, eps, cagr, gm, nm, mr1, mr2, thesis, risks, drivers) => ({
+  label, emoji, color, colorLight,
   targetPrice: tp, impliedPE: pe, fyRevenue: rev, fyEPS: eps, revenueCAGR: cagr, grossMargin: gm, netMargin: nm,
   midRevenue1: mr1, midRevenue2: mr2, thesis, risks, drivers,
 });
 const DEFAULT_SCENARIOS = {
-  bull: mkScenario("BULL", "\u{1F402}", "rgb(34,197,94)", 411, 38, 550, 10.80, 37, 76, 48, 320, 430,
+  bull: mkScenario("BULL", "\u{1F402}", "#22c55e", "rgba(34,197,94,0.08)", 411, 38, 550, 10.80, 37, 76, 48, 320, 430,
     "AI infrastructure spending accelerates. Captures 70%+ of data center GPU market through successive platform transitions.",
     "Execution risk on next-gen ramp; geopolitical disruption; valuation overshoot",
     [{ metric: "Capex (2028E)", value: "$2.0T+", detail: "Hyperscaler + sovereign" }, { metric: "Market Share", value: "70%+", detail: "Dominant position holds" }, { metric: "Revenue Target", value: "$550B", detail: "~2.5x current" }, { metric: "Product Cycle", value: "Full ramp", detail: "ASP uplift" }]),
-  base: mkScenario("BASE", "\u2696\uFE0F", "rgb(59,130,246)", 287, 33, 400, 8.70, 23, 73, 45, 280, 340,
+  base: mkScenario("BASE", "\u2696\uFE0F", "#3b82f6", "rgba(59,130,246,0.08)", 287, 33, 400, 8.70, 23, 73, 45, 280, 340,
     "Growth continues but moderates. Custom alternatives capture 15-20% incremental demand. Multiple compresses.",
     "Competition faster than expected; efficiency breakthroughs; macro slowdown",
     [{ metric: "Capex (2028E)", value: "$1.5T", detail: "Growth decelerates" }, { metric: "Market Share", value: "60-65%", detail: "Competitors take share" }, { metric: "Revenue Target", value: "$400B", detail: "~1.85x current" }, { metric: "Multiple", value: "33x P/E", detail: "Compression" }]),
-  bear: mkScenario("BEAR", "\u{1F43B}", "rgb(239,68,68)", 205, 26, 320, 7.90, 14, 68, 40, 260, 290,
+  bear: mkScenario("BEAR", "\u{1F43B}", "#ef4444", "rgba(239,68,68,0.08)", 205, 26, 320, 7.90, 14, 68, 40, 260, 290,
     "Spending cycle peaks. Competition erodes share. Margins compress. Regulatory headwinds.",
     "This IS the downside \u2014 further deterioration possible if spending is a bubble",
     [{ metric: "Capex (2028E)", value: "$1.1T", detail: "Cycle peaks" }, { metric: "Market Share", value: "50-55%", detail: "Material competition" }, { metric: "Revenue Target", value: "$320B", detail: "~1.5x current" }, { metric: "Margin Pressure", value: "68% GM", detail: "Down from current" }]),
@@ -344,17 +344,79 @@ export default function UniversalModel() {
 
     // ── AUTO-GENERATE SCENARIO DEFAULTS ──
     const p = newPrice || 1;
-    const bullTP = highTarget > 0 ? Math.round(highTarget * 1.1) : Math.round(p * 1.5);
-    const baseTP = avgTarget > 0 ? Math.round(avgTarget) : Math.round(p * 1.2);
-    const bearTP = lowTarget > 0 ? Math.round(lowTarget * 0.9) : Math.round(p * 0.85);
+    // Ensure bull > base > bear, and bull/base are always above current price
+    const bullTP = Math.round(Math.max(highTarget > 0 ? highTarget * 1.1 : 0, p * 1.3));
+    const baseTP = Math.round(Math.max(avgTarget > 0 ? avgTarget * 1.05 : 0, p * 1.1));
+    const bearTP = lowTarget > 0 ? Math.round(lowTarget) : Math.round(p * 0.8);
     const rev = revB || 1;
-    const eps = epsFromFMP || newEPS || 0.01;
+    const eps = +(epsFromFMP || newEPS || 0.01).toFixed(4);
+    const gm = gmFromFMP || newGM || 0;
+    const nm = nmFromFMP || newNM || 0;
+    const companyName = profile?.name || ticker;
 
-    setSc(prev => ({
-      bull: { ...prev.bull, targetPrice: bullTP, fyRevenue: +(rev * 2).toFixed(1), fyEPS: +(eps * 2.2).toFixed(2), impliedPE: eps > 0 ? Math.round(bullTP / (eps * 2.2)) : 35, midRevenue1: +(rev * 1.3).toFixed(1), midRevenue2: +(rev * 1.6).toFixed(1) },
-      base: { ...prev.base, targetPrice: baseTP, fyRevenue: +(rev * 1.5).toFixed(1), fyEPS: +(eps * 1.5).toFixed(2), impliedPE: eps > 0 ? Math.round(baseTP / (eps * 1.5)) : 30, midRevenue1: +(rev * 1.15).toFixed(1), midRevenue2: +(rev * 1.3).toFixed(1) },
-      bear: { ...prev.bear, targetPrice: bearTP, fyRevenue: +(rev * 1.1).toFixed(1), fyEPS: +(eps * 1.1).toFixed(2), impliedPE: eps > 0 ? Math.round(bearTP / (eps * 1.1)) : 20, midRevenue1: +(rev * 1.05).toFixed(1), midRevenue2: +(rev * 1.08).toFixed(1) },
-    }));
+    // Build COMPLETE fresh scenarios — no spread from previous/NVDA defaults
+    setSc({
+      bull: {
+        label: "BULL", emoji: "\u{1F402}", color: "#22c55e", colorLight: "rgba(34,197,94,0.08)",
+        targetPrice: bullTP,
+        impliedPE: eps > 0 ? Math.round(bullTP / (eps * 2.2)) : 35,
+        fyRevenue: +(rev * 2).toFixed(1),
+        fyEPS: +(eps * 2.2).toFixed(2),
+        revenueCAGR: rev > 0 ? Math.round(((Math.pow(2, 1/3)) - 1) * 100) : 25,
+        grossMargin: Math.min(90, +(gm * 1.05).toFixed(1)) || 40,
+        netMargin: Math.min(50, +(nm * 1.3).toFixed(1)) || 15,
+        midRevenue1: +(rev * 1.3).toFixed(1),
+        midRevenue2: +(rev * 1.6).toFixed(1),
+        thesis: `${companyName} executes on growth initiatives. Revenue accelerates with expanding margins and market share gains. Premium valuation sustained by strong fundamentals.`,
+        risks: "Execution risk; competitive pressure; macro headwinds; valuation multiple compression",
+        drivers: [
+          { metric: "Revenue Growth", value: `${rev > 0 ? Math.round(((rev * 2) / rev - 1) * 100) : 100}%`, detail: `$${rev}B → $${+(rev * 2).toFixed(0)}B` },
+          { metric: "EPS Growth", value: `${eps > 0 ? Math.round(((eps * 2.2) / eps - 1) * 100) : 120}%`, detail: `$${eps} → $${+(eps * 2.2).toFixed(2)}` },
+          { metric: "Target Price", value: `$${bullTP}`, detail: `+${Math.round((bullTP / p - 1) * 100)}% from current` },
+          { metric: "Implied P/E", value: `${eps > 0 ? Math.round(bullTP / (eps * 2.2)) : 35}x`, detail: "Growth premium sustained" },
+        ],
+      },
+      base: {
+        label: "BASE", emoji: "\u2696\uFE0F", color: "#3b82f6", colorLight: "rgba(59,130,246,0.08)",
+        targetPrice: baseTP,
+        impliedPE: eps > 0 ? Math.round(baseTP / (eps * 1.5)) : 30,
+        fyRevenue: +(rev * 1.5).toFixed(1),
+        fyEPS: +(eps * 1.5).toFixed(2),
+        revenueCAGR: rev > 0 ? Math.round(((Math.pow(1.5, 1/3)) - 1) * 100) : 15,
+        grossMargin: +(gm * 1.0).toFixed(1) || 35,
+        netMargin: +(nm * 1.1).toFixed(1) || 10,
+        midRevenue1: +(rev * 1.15).toFixed(1),
+        midRevenue2: +(rev * 1.3).toFixed(1),
+        thesis: `${companyName} continues steady growth in line with analyst expectations. Margins stable, competitive position maintained. Multiple normalizes.`,
+        risks: "Slower growth than expected; margin pressure from competition; macro uncertainty",
+        drivers: [
+          { metric: "Revenue Growth", value: `${rev > 0 ? Math.round(((rev * 1.5) / rev - 1) * 100) : 50}%`, detail: `$${rev}B → $${+(rev * 1.5).toFixed(0)}B` },
+          { metric: "EPS Growth", value: `${eps > 0 ? Math.round(((eps * 1.5) / eps - 1) * 100) : 50}%`, detail: `$${eps} → $${+(eps * 1.5).toFixed(2)}` },
+          { metric: "Target Price", value: `$${baseTP}`, detail: `+${Math.round((baseTP / p - 1) * 100)}% from current` },
+          { metric: "Implied P/E", value: `${eps > 0 ? Math.round(baseTP / (eps * 1.5)) : 30}x`, detail: "Multiple normalizes" },
+        ],
+      },
+      bear: {
+        label: "BEAR", emoji: "\u{1F43B}", color: "#ef4444", colorLight: "rgba(239,68,68,0.08)",
+        targetPrice: bearTP,
+        impliedPE: eps > 0 ? Math.round(bearTP / (eps * 1.1)) : 20,
+        fyRevenue: +(rev * 1.1).toFixed(1),
+        fyEPS: +(eps * 1.1).toFixed(2),
+        revenueCAGR: rev > 0 ? Math.round(((Math.pow(1.1, 1/3)) - 1) * 100) : 3,
+        grossMargin: +(gm * 0.92).toFixed(1) || 25,
+        netMargin: +(nm * 0.8).toFixed(1) || 5,
+        midRevenue1: +(rev * 1.03).toFixed(1),
+        midRevenue2: +(rev * 1.06).toFixed(1),
+        thesis: `${companyName} faces headwinds. Growth stalls, margins compress under competitive and macro pressure. Multiple de-rates to value territory.`,
+        risks: "This IS the downside \u2014 further deterioration possible in severe recession or structural disruption",
+        drivers: [
+          { metric: "Revenue Growth", value: `${rev > 0 ? Math.round(((rev * 1.1) / rev - 1) * 100) : 10}%`, detail: `$${rev}B → $${+(rev * 1.1).toFixed(0)}B` },
+          { metric: "EPS Growth", value: `${eps > 0 ? Math.round(((eps * 1.1) / eps - 1) * 100) : 10}%`, detail: `$${eps} → $${+(eps * 1.1).toFixed(2)}` },
+          { metric: "Target Price", value: `$${bearTP}`, detail: `${Math.round((bearTP / p - 1) * 100)}% from current` },
+          { metric: "Margin Pressure", value: `${+(gm * 0.92).toFixed(0)}% GM`, detail: `Down from ${gm.toFixed(0)}%` },
+        ],
+      },
+    });
 
     prevPrice.current = newPrice || null;
     const loaded = [];
@@ -506,7 +568,7 @@ export default function UniversalModel() {
               { label: "Mkt Cap", value: `$${mcap.toFixed(2)}T` },
               { label: "P/E (TTM)", value: pe > 0 ? `${pe.toFixed(1)}x` : "\u2014" },
               { label: "TTM Rev ($B)", value: `$${stock.ttmRevenue}B`, field: "ttmRevenue", prefix: "$", suffix: "B" },
-              { label: "TTM EPS", value: `$${stock.ttmEPS}`, field: "ttmEPS", prefix: "$" },
+              { label: "TTM EPS", value: `$${Number(stock.ttmEPS).toFixed(2)}`, field: "ttmEPS", prefix: "$" },
               { label: "Shares (B)", value: `${stock.shares}B`, field: "shares", suffix: "B" },
               { label: "Gross Margin", value: `${stock.grossMargin}%`, field: "grossMargin", suffix: "%" },
               { label: "Net Margin", value: `${stock.netMargin}%`, field: "netMargin", suffix: "%" },
@@ -598,7 +660,7 @@ export default function UniversalModel() {
           <div style={{ marginTop: 12, padding: 16, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
             <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: DIM, fontWeight: 600, marginBottom: 12 }}>Target Financial Summary</div>
             {[{ label: "Revenue", now: `$${stock.ttmRevenue}B`, field: "fyRevenue", suffix: "B", bm: Math.max(sc.bull.fyRevenue, stock.ttmRevenue, 1) * 1.1 },
-              { label: "EPS", now: `$${stock.ttmEPS}`, field: "fyEPS", bm: Math.max(sc.bull.fyEPS, stock.ttmEPS, 1) * 1.1 },
+              { label: "EPS", now: `$${Number(stock.ttmEPS).toFixed(2)}`, field: "fyEPS", bm: Math.max(sc.bull.fyEPS, stock.ttmEPS, 1) * 1.1 },
               { label: "P/E Multiple", now: pe > 0 ? `${pe.toFixed(1)}x` : "\u2014", field: "impliedPE", suffix: "x", bm: 50 },
               { label: "Rev CAGR", now: "\u2014", field: "revenueCAGR", suffix: "%", bm: 50 },
               { label: "Gross Margin", now: `${stock.grossMargin}%`, field: "grossMargin", suffix: "%", bm: 90 },
@@ -639,7 +701,7 @@ export default function UniversalModel() {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "grid", gridTemplateColumns: "50px 1fr 70px", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 8, background: "rgba(167,139,250,0.06)", borderLeft: "3px solid #a78bfa" }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: "#a78bfa", fontFamily: M }}>{isLive ? "LIVE" : "MKT"}</span>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontFamily: M }}>${stock.ttmEPS} {"\u00D7"} {pe.toFixed(1)}x = <span style={{ color: "#fff", fontWeight: 600 }}>${price.toFixed(2)}</span></div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontFamily: M }}>${Number(stock.ttmEPS).toFixed(2)} {"\u00D7"} {pe.toFixed(1)}x = <span style={{ color: "#fff", fontWeight: 600 }}>${price.toFixed(2)}</span></div>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#a78bfa", fontFamily: M, textAlign: "right" }}>${mcap.toFixed(1)}T</span>
             </div>
             {analyst.avgTarget > 0 && <div style={{ display: "grid", gridTemplateColumns: "50px 1fr 70px", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 8, background: "rgba(251,191,36,0.06)", borderLeft: "3px solid #fbbf24" }}>

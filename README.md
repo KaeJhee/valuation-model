@@ -74,36 +74,6 @@ Open the localhost URL it shows you (usually `http://localhost:5173/valuation-mo
 
 ---
 
-## Deploy to GitHub Pages
-
-```bash
-# 1. Initialize git
-git init
-git add .
-git commit -m "Initial commit - Valuation Model"
-git branch -M main
-
-# 2. Create repo at github.com/new (name: valuation-model, Public, no README)
-git remote add origin https://github.com/YOUR_USERNAME/valuation-model.git
-git push -u origin main
-
-# 3. Enable Pages: Settings → Pages → Source: GitHub Actions
-# 4. Wait ~90 seconds for green checkmark in Actions tab
-# 5. Live at: https://YOUR_USERNAME.github.io/valuation-model/
-```
-
-### Updating After Changes
-
-```bash
-git add .
-git commit -m "describe changes"
-git push
-```
-
-Auto-redeploys in ~1 minute.
-
----
-
 ## Project Structure
 
 ```
